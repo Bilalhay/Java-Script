@@ -1,0 +1,256 @@
+(function (global) {
+
+var dc = {};
+
+var homeHtmlUrl = "snippets/home-snippet.html";
+var allCategoriesUrl = "https://coursera-jhu-default-rtdb.firebaseio.com/categories.json";
+var menuItemsUrl = "https://coursera-jhu-default-rtdb.firebaseio.com/menu_items/",
+    menuItemsHtmlUrl = "snippets/menu-items.html",
+    menuItemsTitleHtmlUrl = "snippets/menu-items-title.html";
+
+// convenience function for inserting html into selector
+var insertHtml = function (selector, html) {
+  var targetElem = document.querySelector(selector);
+  targetElem.innerHTML = html;
+};
+
+// show loading icon inside element identified by 'selector'.
+var showLoading = function (selector) {
+  var html = "<div class='text-center'>";
+  html += "<img src='images/ajax-loader.gif'></div>";
+  insertHtml(selector, html);
+};
+
+// return substitute of '{{propName}}' with propValue in given 'string'
+var insertProperty = function (string, propName, propValue) {
+  var propToReplace = "{{" + propName + "}}";
+  string = string.replace(new RegExp(propToReplace, "g"), propValue);
+  return string;
+};
+
+// remove the class 'active' from home and switch to menu button
+var switchMenuToActive = function () {
+  // remove 'active' from home button
+  var classes = document.querySelector("#navHomeButton").className;
+  classes = classes.replace(new RegExp("active", "g"), "");
+  document.querySelector("#navHomeButton").className = classes;
+
+  // add 'active' to menu button if not already there
+  classes = document.querySelector("#navMenuButton").className;
+  if (classes.indexOf("active") === -1) {
+    classes += " active";
+    document.querySelector("#navMenuButton").className = classes;
+  }
+};
+
+// on page load (before images or css)
+document.addEventListener("DOMContentLoaded", function (event) {
+
+// STEP 0: look over the code till step 4
+// show loading spyner
+showLoading("#main-content");
+$ajaxUtils.sendGetRequest(
+  allCategoriesUrl,
+  buildAndShowHomeHTML, // STEP 1: passing categories to buildAndShowHomeHTML
+  true); // explicitly setting parsing to json
+});
+
+
+// STEP 1: build home page html based on categories array returned from server
+function buildAndShowHomeHTML (categories) {
+
+  // load home snippet page
+  $ajaxUtils.sendGetRequest(
+    homeHtmlUrl,
+    function (homeHtml) {
+      // STEP 2: choose random category
+      var chosenCategoryShortName = chooseRandomCategory(categories).short_name;
+
+      // STEP 3: replace the placeholder with the actual short name string
+      var homeHtmlToChooseRandomCategory = insertProperty(homeHtml, "randomCategoryShortName", "'" + chosenCategoryShortName + "'");
+
+      // STEP 4: push the html into main content area
+      insertHtml("#main-content", homeHtmlToChooseRandomCategory);
+
+    },
+    false); // false because we just want text html not json
+}
+
+
+// STEP 2: helper function to pick random category object from array
+function chooseRandomCategory (categories) {
+  // choose a random index based on array length
+  var randomArrayIndex = Math.floor(Math.random() * categories.length);
+
+  // return the category object at that index
+  return categories[randomArrayIndex];
+}
+
+
+// load the menu categories view
+dc.loadMenuCategories = function () {
+  showLoading("#main-content");
+  $ajaxUtils.sendGetRequest(
+    "https://coursera-jhu-default-rtdb.firebaseio.com/categories.json",
+    buildAndShowCategoriesHTML,
+    true);
+};
+
+
+// load the menu items view 'categoryShort' is a short_name for a category
+dc.loadMenuItems = function (categoryShort) {
+  showLoading("#main-content");
+  $ajaxUtils.sendGetRequest(
+    menuItemsUrl + categoryShort + ".json",
+    buildAndShowMenuItemsHTML,
+    true);
+};
+
+
+// builds html for the categories page based on the data from the server
+function buildAndShowCategoriesHTML (categories) {
+  // load title snippet of categories page
+  $ajaxUtils.sendGetRequest(
+    "snippets/categories-title-snippet.html",
+    function (categoriesTitleHtml) {
+      // retrieve single category snippet
+      $ajaxUtils.sendGetRequest(
+        "snippets/category-snippet.html",
+        function (categorySnippetHtml) {
+          // switch CSS class active to menu button
+          switchMenuToActive();
+
+          var categoriesViewHtml =
+            buildCategoriesViewHtml(categories,
+                                    categoriesTitleHtml,
+                                    categorySnippetHtml);
+          insertHtml("#main-content", categoriesViewHtml);
+        },
+        false);
+    },
+    false);
+}
+
+
+// using categories data and snippets html to build categories view html to be inserted into page
+function buildCategoriesViewHtml(categories,
+                                 categoriesTitleHtml,
+                                 categorySnippetHtml) {
+
+  var finalHtml = categoriesTitleHtml;
+  finalHtml += "<section class='row'>";
+
+  // loop over categories
+  for (var i = 0; i < categories.length; i++) {
+    // insert category values
+    var html = categorySnippetHtml;
+    var name = "" + categories[i].name;
+    var short_name = categories[i].short_name;
+    html = insertProperty(html, "name", name);
+    html = insertProperty(html, "short_name", short_name);
+    finalHtml += html;
+  }
+
+  finalHtml += "</section>";
+  return finalHtml;
+}
+
+
+// builds html for the single category page with its menu items
+function buildAndShowMenuItemsHTML (categoryMenuItems) {
+  // load menu items title snippet
+  $ajaxUtils.sendGetRequest(
+    menuItemsTitleHtmlUrl,
+    function (menuItemsTitleHtml) {
+      // retrieve single menu item snippet
+      $ajaxUtils.sendGetRequest(
+        menuItemsHtmlUrl,
+        function (menuItemsHtml) {
+          // switch CSS class active to menu button
+          switchMenuToActive();
+
+          var menuItemsViewHtml =
+            buildMenuItemsViewHtml(categoryMenuItems,
+                                   menuItemsTitleHtml,
+                                   menuItemsHtml);
+          insertHtml("#main-content", menuItemsViewHtml);
+        },
+        false);
+    },
+    false);
+}
+
+
+// using menu items data and snippets html to build menu items view html to be inserted into page
+function buildMenuItemsViewHtml(categoryMenuItems,
+                                menuItemsTitleHtml,
+                                menuItemsHtml) {
+
+  menuItemsTitleHtml =
+    insertProperty(menuItemsTitleHtml,
+                   "name",
+                   categoryMenuItems.category.name);
+  menuItemsTitleHtml =
+    insertProperty(menuItemsTitleHtml,
+                   "special_instructions",
+                   categoryMenuItems.category.special_instructions);
+
+  var finalHtml = menuItemsTitleHtml;
+  finalHtml += "<section class='row'>";
+
+  // loop over menu items
+  var menuItems = categoryMenuItems.menu_items;
+  var catShortName = categoryMenuItems.category.short_name;
+  for (var i = 0; i < menuItems.length; i++) {
+    // insert menu item values
+    var html = menuItemsHtml;
+    html = insertProperty(html, "short_name", menuItems[i].short_name);
+    html = insertProperty(html, "catShortName", catShortName);
+    html = insertItemPrice(html, "price_small", menuItems[i].price_small);
+    html = insertItemPortionName(html, "small_portion", menuItems[i].small_portion);
+    html = insertItemPrice(html, "price_large", menuItems[i].price_large);
+    html = insertItemPortionName(html, "large_portion", menuItems[i].large_portion);
+    html = insertProperty(html, "name", menuItems[i].name);
+    html = insertProperty(html, "description", menuItems[i].description);
+
+    // add clearfix after every second menu item
+    if (i % 2 !== 0) {
+      html += "<div class='clearfix visible-lg-block visible-md-block'></div>";
+    }
+
+    finalHtml += html;
+  }
+
+  finalHtml += "</section>";
+  return finalHtml;
+}
+
+
+// appends price with '$' if price exists
+function insertItemPrice(html, pricePropName, priceValue) {
+  // if not specified, replace with empty string
+  if (!priceValue) {
+    return insertProperty(html, pricePropName, "");
+  }
+
+  priceValue = "$" + priceValue.toFixed(2);
+  html = insertProperty(html, pricePropName, priceValue);
+  return html;
+}
+
+
+// appends portion name in parens if it exists
+function insertItemPortionName(html, portionPropName, portionValue) {
+  // if not specified, remove the placeholder
+  if (!portionValue) {
+    return insertProperty(html, portionPropName, "");
+  }
+
+  portionValue = "(" + portionValue + ")";
+  html = insertProperty(html, portionPropName, portionValue);
+  return html;
+}
+
+global.$dc = dc;
+
+})(window);
